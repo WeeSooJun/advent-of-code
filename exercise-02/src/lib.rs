@@ -13,9 +13,9 @@ pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
     for line in contents.lines() {
       let vector: Vec<&str> = line.split_whitespace().collect();
       let opponent = vector[0];
-      let mine = vector[1];
+      let result = vector[1];
       
-      total += get_outcome(opponent, mine) + get_shape_score(mine);
+      total += get_shape_score(opponent, result) + get_outcome(result);
     }
 
     println!("{}", total);
@@ -23,32 +23,32 @@ pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-fn get_outcome(opponent: &str, mine: &str) -> u32 {
+fn get_shape_score(opponent: &str, result: &str) -> u32 {
     match opponent {
-        "A" => match mine { 
+        "A" => match result { 
             "X" => 3,
-            "Y" => 6,
-            _ => 0,
+            "Y" => 1,
+            _ => 2,
         },
-        "B" => match mine { 
-            "Y" => 3,
-            "Z" => 6,
-            _ => 0,
-        },
-        "C" => match mine { 
+        "B" => match result { 
+            "Y" => 2,
             "Z" => 3,
-            "X" => 6,
-            _ => 0,
+            _ => 1,
+        },
+        "C" => match result { 
+            "Z" => 1,
+            "X" => 2,
+            _ => 3,
         },
         _ => 0,
     }
 }
 
-fn get_shape_score(shape: &str) -> u32 {
+fn get_outcome(shape: &str) -> u32 {
     match shape {
-        "X" => 1,
-        "Y" => 2,
-        "Z" => 3,
+        "X" => 0,
+        "Y" => 3,
+        "Z" => 6,
         _ => 0 // put as zero first might do some error handling next time
     }
 }

@@ -3,6 +3,8 @@ use std::error::Error;
 use std::fs;
 use std::str::FromStr;
 
+// TODO: Think it's probably a good time to look into consolidated error enums, too many unwraps everywhere and trying to ? might not work too.
+
 pub struct Config {
     pub file_path: String,
 }

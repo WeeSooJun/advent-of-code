@@ -1,4 +1,5 @@
-use std::collections::HashMap;
+use std::cmp::min;
+use std::collections::{HashMap, HashSet};
 use std::error::Error;
 use std::fs;
 
@@ -20,6 +21,7 @@ struct Directory {
     directories: Vec<String>,
     files: Vec<File>,
     size: usize,
+    full_path: String,
 }
 
 #[derive(Debug, Clone)]
@@ -37,8 +39,10 @@ pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
         directories: Vec::new(),
         files: Vec::new(),
         size: 0,
+        full_path: "/".to_owned(),
     };
     let mut current_dir_name = "/".to_string(); // initialize root
+    let mut current_path = "/".to_string();
     hashmap.insert(current_dir_name.clone(), root);
     for line in contents.lines() {
         if line.contains("/") {
@@ -46,40 +50,64 @@ pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
         }
 
         match line {
-            line if line.starts_with("$ cd") => current_dir_name = line[5..].to_string(),
+            line if line.starts_with("$ cd") => {
+                if (&line[5..] == "..") {
+                    let (new, _) = current_path.rsplit_once("/").unwrap();
+                    let (new, _) = new.rsplit_once("/").unwrap();
+                    if new == "" {
+                        current_path = "/".to_string()
+                    } else {
+                        current_path = new.to_string() + "/";
+                    }
+                } else {
+                    current_dir_name = line[5..].to_string();
+                    current_path.push_str(&(line[5..].to_owned() + "/"));
+                }
+            }
             line if line.starts_with("$ ls") => process_curr_dir(),
             line if line.starts_with("dir") => {
                 let dir_name = &line[4..];
+                let mut key = current_path.clone();
+                key.push_str(&dir_name);
                 hashmap.insert(
-                    dir_name.to_string(),
+                    key,
                     Directory {
                         parent_name: current_dir_name.clone(),
                         name: dir_name.to_owned(),
                         directories: Vec::new(),
                         files: Vec::new(),
                         size: 0,
+                        full_path: current_path.clone() + dir_name,
                     },
                 );
+                let (test, _) = current_path.rsplit_once("/").unwrap();
+                let mut get_key = test.to_string();
+                if current_dir_name == "/" {
+                    get_key = "/".to_string()
+                }
                 hashmap
-                    .get_mut(&current_dir_name)
+                    .get_mut(&get_key)
                     .unwrap()
                     .directories
-                    .push(dir_name.to_string());
+                    .push(current_path.clone() + dir_name);
             }
             _ => {
                 let (size, name) = line.split_once(" ").unwrap();
                 let size: usize = size.parse().unwrap();
                 let name = name.to_string();
+                let (another, _) = current_path.rsplit_once("/").unwrap();
+                let mut get_key = another.to_string();
+                if current_path == "/" {
+                    get_key = "/".to_string()
+                }
                 hashmap
-                    .get_mut(&current_dir_name)
+                    .get_mut(&get_key)
                     .unwrap()
                     .files
                     .push(File { size, name })
             } // gna leave this like that for now, by right should match digits
         };
     }
-
-    println!("Initial hashmap: {:?}", hashmap);
 
     let mut children: Vec<(String, usize)> = Vec::new();
 
@@ -92,51 +120,47 @@ pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
     });
 
     hashmap
-        .values_mut()
+        .values()
         .filter(|directory| directory.directories.len() == 0)
         .for_each(|directory| {
-            children.push((directory.name.clone(), directory.size));
+            children.push((directory.full_path.clone(), directory.size));
         });
 
+    let mut another = HashMap::new();
+    hashmap.values().for_each(|directory| {
+        another.insert(directory.full_path.clone(), 0);
+    });
+
+    let mut hashset = HashSet::new();
+
     while children.len() != 0 {
-        println!("children: {:?}", children);
         let mut new_children = Vec::new();
-        hashmap
-            .values_mut()
-            .filter(|directory| {
-                directory.directories.clone().into_iter().any(|dir_name| {
-                    children
-                        .clone()
-                        .into_iter()
-                        .map(|item| item.0)
-                        .collect::<Vec<String>>()
-                        .contains(&dir_name)
-                })
-            })
-            .for_each(|directory| {
-                new_children.push((directory.name.clone(), directory.size));
-                directory.size += children
-                    .clone()
-                    .into_iter()
-                    .map(|item| {
-                        // println!("{:?}", item);
-                        item.1
-                    })
-                    .sum::<usize>();
-            });
+
+        for child in children {
+            hashmap
+                .values_mut()
+                .filter(|directory| directory.directories.contains(&child.0))
+                .for_each(|directory| {
+                    hashset.insert(directory.full_path.clone());
+                    directory.size += child.1;
+                    *another.get_mut(&directory.full_path).unwrap() += 1;
+                    if *another.get(&directory.full_path).unwrap() == directory.directories.len() {
+                        new_children.push((directory.full_path.clone(), directory.size));
+                    }
+                });
+        }
+
         children = new_children;
     }
 
-    println!("Final hashmap: {:?}", hashmap);
-    let result: usize = hashmap
+    let result = hashmap
         .values()
-        .filter(|directory| directory.size <= 100_000)
-        .map(|directory| {
-            // println!("{:?}", directory);
-            directory.size
+        .filter(|directory| {
+            directory.size >= 30_000_000 - (70_000_000 - hashmap.get("/").unwrap().size)
         })
-        .sum();
-    println!("{}", result);
+        .map(|directory| directory.size)
+        .min()
+        .unwrap();
 
     Ok(())
 }

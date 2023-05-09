@@ -1,5 +1,4 @@
-use std::cmp::min;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::error::Error;
 use std::fs;
 
@@ -16,8 +15,6 @@ impl Config {
 
 #[derive(Debug, Clone)]
 struct Directory {
-    parent_name: String,
-    name: String,
     directories: Vec<String>,
     files: Vec<File>,
     size: usize,
@@ -34,8 +31,6 @@ pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
     let contents = fs::read_to_string(config.file_path)?;
     let mut hashmap: HashMap<String, Directory> = HashMap::new();
     let mut root = Directory {
-        parent_name: "".to_owned(),
-        name: "/".to_owned(),
         directories: Vec::new(),
         files: Vec::new(),
         size: 0,
@@ -72,8 +67,6 @@ pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
                 hashmap.insert(
                     key,
                     Directory {
-                        parent_name: current_dir_name.clone(),
-                        name: dir_name.to_owned(),
                         directories: Vec::new(),
                         files: Vec::new(),
                         size: 0,
@@ -111,6 +104,7 @@ pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
 
     let mut children: Vec<(String, usize)> = Vec::new();
 
+    // Sum up the sizes of the files in each directory first
     hashmap.values_mut().for_each(|directory| {
         directory.size = directory
             .files
@@ -119,6 +113,7 @@ pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
             .fold(0, |acc, file| acc + file.size)
     });
 
+    // Get all directories that are "leaves"
     hashmap
         .values()
         .filter(|directory| directory.directories.len() == 0)
@@ -126,12 +121,11 @@ pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
             children.push((directory.full_path.clone(), directory.size));
         });
 
+    // Initialise visited children count
     let mut another = HashMap::new();
     hashmap.values().for_each(|directory| {
         another.insert(directory.full_path.clone(), 0);
     });
-
-    let mut hashset = HashSet::new();
 
     while children.len() != 0 {
         let mut new_children = Vec::new();
@@ -141,10 +135,10 @@ pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
                 .values_mut()
                 .filter(|directory| directory.directories.contains(&child.0))
                 .for_each(|directory| {
-                    hashset.insert(directory.full_path.clone());
                     directory.size += child.1;
                     *another.get_mut(&directory.full_path).unwrap() += 1;
                     if *another.get(&directory.full_path).unwrap() == directory.directories.len() {
+                        // add "new" children in the sense that once the visited count is equals to the number of child directories then it essentially becomes a "leave" and you can consolidate file sizes by then
                         new_children.push((directory.full_path.clone(), directory.size));
                     }
                 });
@@ -161,6 +155,8 @@ pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
         .map(|directory| directory.size)
         .min()
         .unwrap();
+
+    println!("{}", result);
 
     Ok(())
 }
